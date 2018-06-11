@@ -132,46 +132,46 @@ function getBody(req, callback) {
   });
 }
 
-function getMockedContent(path, prefix, body, query) {
+function getMockedContent({ path, prefix, body, query, directory }) {
   var mockedJSName = prefix + (getBodyOrQueryString(body, query) || '') + '.js';
-  var mockJSFile = join(mockserver.directory, path, mockedJSName);
+  var mockJSFile = join(directory, path, mockedJSName);
 
   try {
     var foundFile = require(process.cwd() + '/' + mockJSFile);
-    mockserver.log('Matching mocks from... \n -> ' + mockJSFile, 'green')
+    mockserver.log('Serving mocks from... \n -> ' + mockJSFile, 'white')
     foundFile.isJS = true;
     return foundFile;
   } catch (err) {
   }
 
   var mockedMockName = prefix + (getBodyOrQueryString(body, query) || '') + '.mock';
-  var mockMockFile = join(mockserver.directory, path, mockedMockName);
+  var mockMockFile = join(directory, path, mockedMockName);
 
   try {
-    mockserver.log('Matching mocks from... \n -> ' + mockJSFile, 'green')
+    mockserver.log('Serving mocks from...\n -> ' + mockMockFile, 'white')
     return fs.readFileSync(mockMockFile, { encoding: 'utf8' });
   } catch (err) {
-    return (body || query) && getMockedContent(path, prefix);
+    return (body || query) && getMockedContent({ path, prefix, directory });
   }
 }
 
 var mockserver = {
   directory: '.',
   verbose: false,
-  log: function(msg, color) {
+  log: function (msg, color) {
     if (this.verbose) {
       console.log('[ Mockserver ]: '[color] + msg)
     }
   },
-  use: function(name, value) {
+  use: function (name, value) {
     if (value && name) {
       this[name] = value
     }
   },
-  handle: function(req, res) {
+  handle: function (req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*')
 
-    getBody(req, function(body) {
+    getBody(req, function (body) {
       var url = req.url;
       var path = url;
       var queryIndex = url.indexOf('?'),
@@ -184,12 +184,12 @@ var mockserver = {
       }
 
       var watchedHeaders = module.exports.headers;
-      if(watchedHeaders && !Array.isArray(watchedHeaders)) {
+      if (watchedHeaders && !Array.isArray(watchedHeaders)) {
         watchedHeaders = [watchedHeaders];
       }
-      if(req.headers && watchedHeaders && watchedHeaders.length) {
-        watchedHeaders.forEach(function(header) {
-          if(req.headers[header]) {
+      if (req.headers && watchedHeaders && watchedHeaders.length) {
+        watchedHeaders.forEach(function (header) {
+          if (req.headers[header]) {
             headers.push('_' + header + '=' + req.headers[header]);
           }
         });
@@ -201,17 +201,19 @@ var mockserver = {
         directory = mockserver.directory,
         permutations = [[]];
 
-      if(headers.length) {
-        permutations = Combinatorics.permutationCombination(headers).toArray().sort(function(a, b) { return b.length - a.length; });
+      if (headers.length) {
+        permutations = Combinatorics.permutationCombination(headers).toArray().sort(function (a, b) {
+          return b.length - a.length;
+        });
         permutations.push([]);
       }
 
-      while(permutations.length) {
+      while (permutations.length) {
         var prefix = method + permutations.pop().join('');
         content = getMockedContent({ path, prefix, body, query, directory }) || content;
       }
 
-      if(content) {
+      if (content) {
         mockserver.log('Mocks sent to client from...\n' + url, 'green')
 
         var mock = content.isJS ? parseJS(content) : parse(content);
@@ -227,7 +229,7 @@ var mockserver = {
   }
 };
 
-module.exports = function(directory, verbose){
+module.exports = function (directory, verbose) {
   mockserver.use('directory', directory);
   mockserver.use('verbose', verbose);
 
