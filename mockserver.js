@@ -1,5 +1,6 @@
 var fs = require('fs');
 var join = require('path').join;
+var colors = require('colors')
 var Combinatorics = require('js-combinatorics').Combinatorics;
 
 /**
@@ -8,7 +9,7 @@ var Combinatorics = require('js-combinatorics').Combinatorics;
  * (ie. HTTP/1.1 200 Ok)
  */
 var parseStatus = function (header) {
-    return header.split(' ')[1];
+  return header.split(' ')[1];
 };
 
 /**
@@ -16,9 +17,9 @@ var parseStatus = function (header) {
  * by colon.
  */
 var parseHeader = function (header) {
-    header = header.split(': ');
+  header = header.split(': ');
 
-    return {key: header[0], value: header[1]};
+  return { key: header[0], value: header[1] };
 };
 
 /**
@@ -27,28 +28,28 @@ var parseHeader = function (header) {
  * status code, headers and body.
  */
 var parse = function (content) {
-    var headers         = {};
-    var body;
-    var bodyContent     = [];
-    content             = content.split('\n');
-    var status          = parseStatus(content[0]);
-    var headerEnd       = false;
-    delete content[0];
+  var headers = {};
+  var body;
+  var bodyContent = [];
+  content = content.split('\n');
+  var status = parseStatus(content[0]);
+  var headerEnd = false;
+  delete content[0];
 
-    content.forEach(function(line) {
-        if (headerEnd) {
-            bodyContent.push(line);
-        } else if (line === '' || line === '\r') {
-            headerEnd = true;
-        } else {
-            var header = parseHeader(line);
-            headers[header.key] = header.value;
-        }
-    });
+  content.forEach(function (line) {
+    if (headerEnd) {
+      bodyContent.push(line);
+    } else if (line === '' || line === '\r') {
+      headerEnd = true;
+    } else {
+      var header = parseHeader(line);
+      headers[header.key] = header.value;
+    }
+  });
 
-    body = bodyContent.join('\n');
+  body = bodyContent.join('\n');
 
-    return {status: status, headers: headers, body: body};
+  return { status: status, headers: headers, body: body };
 };
 
 
@@ -58,27 +59,27 @@ var parse = function (content) {
  * status code, headers and body.
  */
 var parseJS = function (content) {
-    var headers = {};
-    var body;
+  var headers = {};
+  var body;
 
-    content.headers.forEach(function(headerItem) {
-        var header = parseHeader(headerItem);
-        headers[header.key] = header.value;
-    })
+  content.headers.forEach(function (headerItem) {
+    var header = parseHeader(headerItem);
+    headers[header.key] = header.value;
+  })
 
-    if (typeof content.body === 'object') {
-        body = JSON.stringify(content.body);
-    } else {
-        body = content.body;
-    }
+  if (typeof content.body === 'object') {
+    body = JSON.stringify(content.body);
+  } else {
+    body = content.body;
+  }
 
-    if (typeof content.status === 'number') {
-        status = content.status;
-    } else {
-        status = parseStatus(content.status);
-    }
+  if (typeof content.status === 'number') {
+    status = content.status;
+  } else {
+    status = parseStatus(content.status);
+  }
 
-    return {status: status, headers: headers, body: body};
+  return { status: status, headers: headers, body: body };
 };
 
 
@@ -122,100 +123,115 @@ function getBodyOrQueryString(body, query) {
 function getBody(req, callback) {
   var body = '';
 
-  req.on('data', function(b){
+  req.on('data', function (b) {
     body = body + b.toString();
   });
 
-  req.on('end', function() {
+  req.on('end', function () {
     callback(body);
   });
 }
 
 function getMockedContent(path, prefix, body, query) {
-    var mockedJSName =  prefix + (getBodyOrQueryString(body, query) || '') + '.js';
-    var mockJSFile = join(mockserver.directory, path, mockedJSName);
+  var mockedJSName = prefix + (getBodyOrQueryString(body, query) || '') + '.js';
+  var mockJSFile = join(mockserver.directory, path, mockedJSName);
 
-    try {
-        var foundFile = require(process.cwd() + '/' + mockJSFile);
-        foundFile.isJS = true;
-        return foundFile;
-    } catch(err) {
-    }
+  try {
+    var foundFile = require(process.cwd() + '/' + mockJSFile);
+    mockserver.log('Matching mocks from... \n -> ' + mockJSFile, 'green')
+    foundFile.isJS = true;
+    return foundFile;
+  } catch (err) {
+  }
 
-    var mockedMockName =  prefix + (getBodyOrQueryString(body, query) || '') + '.mock';
-    var mockMockFile = join(mockserver.directory, path, mockedMockName);
+  var mockedMockName = prefix + (getBodyOrQueryString(body, query) || '') + '.mock';
+  var mockMockFile = join(mockserver.directory, path, mockedMockName);
 
-    try {
-        return fs.readFileSync(mockMockFile, {encoding: 'utf8'});
-    } catch(err) {
-        return (body || query) && getMockedContent(path, prefix);
-    }
-
+  try {
+    mockserver.log('Matching mocks from... \n -> ' + mockJSFile, 'green')
+    return fs.readFileSync(mockMockFile, { encoding: 'utf8' });
+  } catch (err) {
+    return (body || query) && getMockedContent(path, prefix);
+  }
 }
 
 var mockserver = {
-    directory:       '.',
-    use:             function(directory) {
-        this.directory = directory;
-    },
-    handle:          function(req, res) {
-      getBody(req, function(body) {
-        var url = req.url;
-        var path = url;
-
-        var queryIndex = url.indexOf('?'),
-            query = queryIndex >= 0 ? url.substring(queryIndex).replace(/\?/g, '') : '',
-            method = req.method.toUpperCase(),
-            headers = [];
-
-        if (queryIndex > 0) {
-            path = url.substring(0, queryIndex);
-        }
-
-        var watchedHeaders = module.exports.headers;
-        if(watchedHeaders && !Array.isArray(watchedHeaders)) {
-            watchedHeaders = [watchedHeaders];
-        }
-        if(req.headers && watchedHeaders && watchedHeaders.length) {
-            watchedHeaders.forEach(function(header) {
-                if(req.headers[header]) {
-                    headers.push('_' + header + '=' + req.headers[header]);
-                }
-            });
-        }
-
-        // Now, permute the possible headers, and look for any matching files, prioritizing on
-        // both # of headers and the original header order
-        var content,
-            permutations = [[]];
-
-        if(headers.length) {
-            permutations = Combinatorics.permutationCombination(headers).toArray().sort(function(a, b) { return b.length - a.length; });
-            permutations.push([]);
-        }
-
-        while(permutations.length) {
-            var prefix = method + permutations.pop().join('');
-            content = getMockedContent(path, prefix, body, query) || content;
-        }
-
-        if(content) {
-            var mock = content.isJS ? parseJS(content) : parse(content)
-            res.writeHead(mock.status, mock.headers);
-
-            return res.end(mock.body);
-        } else {
-            res.writeHead(404);
-            res.end('Not Mocked');
-        }
-      });
+  directory: '.',
+  verbose: false,
+  log: function(msg, color) {
+    if (this.verbose) {
+      console.log('[ Mockserver ]: '[color] + msg)
     }
+  },
+  use: function(name, value) {
+    if (value && name) {
+      this[name] = value
+    }
+  },
+  handle: function(req, res) {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+
+    getBody(req, function(body) {
+      var url = req.url;
+      var path = url;
+      var queryIndex = url.indexOf('?'),
+        query = queryIndex >= 0 ? url.substring(queryIndex).replace(/\?/g, '') : '',
+        method = req.method.toUpperCase(),
+        headers = [];
+
+      if (queryIndex > 0) {
+        path = url.substring(0, queryIndex);
+      }
+
+      var watchedHeaders = module.exports.headers;
+      if(watchedHeaders && !Array.isArray(watchedHeaders)) {
+        watchedHeaders = [watchedHeaders];
+      }
+      if(req.headers && watchedHeaders && watchedHeaders.length) {
+        watchedHeaders.forEach(function(header) {
+          if(req.headers[header]) {
+            headers.push('_' + header + '=' + req.headers[header]);
+          }
+        });
+      }
+
+      // Now, permute the possible headers, and look for any matching files, prioritizing on
+      // both # of headers and the original header order
+      var content,
+        directory = mockserver.directory,
+        permutations = [[]];
+
+      if(headers.length) {
+        permutations = Combinatorics.permutationCombination(headers).toArray().sort(function(a, b) { return b.length - a.length; });
+        permutations.push([]);
+      }
+
+      while(permutations.length) {
+        var prefix = method + permutations.pop().join('');
+        content = getMockedContent({ path, prefix, body, query, directory }) || content;
+      }
+
+      if(content) {
+        mockserver.log('Mocks sent to client from...\n' + url, 'green')
+
+        var mock = content.isJS ? parseJS(content) : parse(content);
+        res.writeHead(mock.status, mock.headers);
+        return res.end(mock.body);
+      } else {
+        mockserver.log('No mocks matched from...\n -> ' + url, 'red')
+
+        res.writeHead(404);
+        res.end('Not Mocked');
+      }
+    });
+  }
 };
 
-module.exports = function(directory){
-    mockserver.use(directory);
+module.exports = function(directory, verbose){
+  mockserver.use('directory', directory);
+  mockserver.use('verbose', verbose);
 
-    return mockserver.handle;
+  return mockserver.handle;
 };
 
 module.exports.headers = [];
